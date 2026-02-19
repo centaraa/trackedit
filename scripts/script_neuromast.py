@@ -14,16 +14,16 @@ warnings.filterwarnings("ignore", category=FutureWarning, message=".*qt_viewer.*
 # **********INPUTS*********
 # path to the working directory that contains the database file AND metadata.toml:
 working_directory = Path(
-    "/hpc/projects/group.royer/people/teun.huijben/data/Akila/trackedit_example_data/"
+    "/home/bmager/share/Bernhard_lab_server/00_data/Microscopy_Data/Lightsheet/LS2_Irchel/20250409-LS2-live-cowB13-2C-CAAX_mStG-M4MTBD_mClov-H2B_mScarl/20250409_work/Pos_10_Fluor"
 )
 # name of the database file to start from, or "latest" to start from the latest version, defaults to "data.db"
 db_filename_start = "latest"
 # maximum number of frames display, defaults to None (use all frames)
 tmax = 600
 # (Z),Y,X, defaults to (1, 1, 1)
-scale = (2.31, 1, 1)
+scale = (1, 0.26, 0.26)
 # overwrite existing database/changelog, defaults to False (not used when db_filename_start is "latest")
-allow_overwrite = False
+allow_overwrite = True
 
 # OPTIONAL: imaging data
 # imaging_zarr_file = (

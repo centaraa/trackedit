@@ -42,11 +42,16 @@ def convert_geff_to_db(geff_path: Path, output_path: Path = None) -> None:
     rx_graph, geff_metadata = geff.read(str(geff_path), backend="rustworkx")
 
     # Validate GEFF metadata
-    required_node_props = ["t", "z", "y", "x", "solution", "mask", "bbox"]
+    required_node_props = ["t", "z", "y", "x", "solution"]
+    optional_node_props = ["mask", "bbox"]
     node_props = geff_metadata.node_props_metadata
     missing_props = [prop for prop in required_node_props if prop not in node_props]
     if missing_props:
         raise ValueError(f"Missing required node properties in GEFF: {missing_props}")
+    has_mask = all(prop in node_props for prop in ["mask", "bbox"])
+    if not has_mask:
+        missing_optional = [p for p in optional_node_props if p not in node_props]
+        print(f"⚠ Optional node properties not found: {missing_optional}. Point masks will be used.")
 
     print(f"Found {rx_graph.num_nodes()} nodes and {rx_graph.num_edges()} edges")
 
@@ -88,27 +93,39 @@ def convert_geff_to_db(geff_path: Path, output_path: Path = None) -> None:
         y = float(node_attrs["y"])
         x = float(node_attrs["x"])
         solution = bool(node_attrs["solution"])
-        bbox = np.array(node_attrs["bbox"], dtype=np.int32)
 
-        # Convert mask to proper numpy array for Node object
-        mask_array = node_attrs["mask"]
-        if not isinstance(mask_array, np.ndarray):
-            mask_array = np.array(mask_array)
-        mask_bool = np.ascontiguousarray(mask_array, dtype=bool)
+        if has_mask:
+            bbox = np.array(node_attrs["bbox"], dtype=np.int32)
 
-        # Convert to 2D if data is detected as 2D
-        if is_2d_data and mask_bool.ndim == 3:
-            # For 2D data, take the first z-slice or sum across z if multiple slices
-            if mask_bool.shape[0] == 1:
-                mask_bool = mask_bool[0]  # Take the single z-slice
+            # Convert mask to proper numpy array for Node object
+            mask_array = node_attrs["mask"]
+            if not isinstance(mask_array, np.ndarray):
+                mask_array = np.array(mask_array)
+            mask_bool = np.ascontiguousarray(mask_array, dtype=bool)
+
+            # Convert to 2D if data is detected as 2D
+            if is_2d_data and mask_bool.ndim == 3:
+                # For 2D data, take the first z-slice or sum across z if multiple slices
+                if mask_bool.shape[0] == 1:
+                    mask_bool = mask_bool[0]  # Take the single z-slice
+                else:
+                    mask_bool = np.any(mask_bool, axis=0)  # Combine all z-slices
+
+            # Handle bbox similarly
+            if is_2d_data and len(bbox) == 6:  # 3D bbox: [x1, y1, z1, x2, y2, z2]
+                bbox = np.array(
+                    [bbox[1], bbox[2], bbox[4], bbox[5]]
+                )  # Extract [x1, y1, x2, y2] -> [x_min, y_min, x_max, y_max]
+        else:
+            # No mask/bbox in GEFF — create a minimal 1-pixel point mask
+            if is_2d_data:
+                yi, xi = int(round(y)), int(round(x))
+                mask_bool = np.ones((1, 1), dtype=bool)
+                bbox = np.array([yi, xi, yi + 1, xi + 1], dtype=np.int32)
             else:
-                mask_bool = np.any(mask_bool, axis=0)  # Combine all z-slices
-
-        # Handle bbox similarly
-        if is_2d_data and len(bbox) == 6:  # 3D bbox: [x1, y1, z1, x2, y2, z2]
-            bbox = np.array(
-                [bbox[1], bbox[2], bbox[4], bbox[5]]
-            )  # Extract [x1, y1, x2, y2] -> [x_min, y_min, x_max, y_max]
+                zi, yi, xi = int(round(z)), int(round(y)), int(round(x))
+                mask_bool = np.ones((1, 1, 1), dtype=bool)
+                bbox = np.array([zi, yi, xi, zi + 1, yi + 1, xi + 1], dtype=np.int32)
 
         # Create Node object
         # Note: The vendored Node.__init__ sets mask and bbox to None when parent is None,
