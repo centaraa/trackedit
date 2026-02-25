@@ -56,9 +56,9 @@ def _convert_single_tiff(tiff_path: Path, zarr_path: Path, group: str) -> None:
             f"Expected at least 3D data (T, Y, X), got shape {data.shape}"
         )
 
-    zarr_array = zarr.open(
-        str(zarr_path / group),
-        mode="w",
+    root = zarr.open_group(str(zarr_path), mode="w")
+    zarr_array = root.create_array(
+        group,
         shape=data.shape,
         dtype=data.dtype,
         chunks=(1, *data.shape[1:]),
@@ -89,9 +89,9 @@ def _convert_tiff_folder(folder: Path, zarr_path: Path, group: str) -> None:
     print(f"  Per-frame shape: {example.shape}  dtype: {data_dtype}")
     print(f"  Full array shape: {data_shape}")
 
-    zarr_array = zarr.open(
-        str(zarr_path / group),
-        mode="w",
+    root = zarr.open_group(str(zarr_path), mode="w")
+    zarr_array = root.create_array(
+        group,
         shape=data_shape,
         dtype=data_dtype,
         chunks=(1, *example.shape),

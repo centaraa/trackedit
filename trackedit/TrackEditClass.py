@@ -101,7 +101,14 @@ class TrackEditClass:
                     visible=False,
                     translate=self.databasehandler.image_translate,
                 )
-                layer.reset_contrast_limits()
+                # Avoid scanning entire array for contrast limits (very slow for large zarr).
+                # Use dtype range for integer types; sample first frame for floats.
+                if np.issubdtype(channel_data.dtype, np.integer):
+                    info = np.iinfo(channel_data.dtype)
+                    layer.contrast_limits = (info.min, info.max)
+                else:
+                    sample = np.asarray(channel_data[0])
+                    layer.contrast_limits = (float(sample.min()), float(sample.max()))
 
         tabwidget_bottom = QTabWidget()
         tabwidget_bottom.addTab(self.TreeWidget, "TreeWidget")

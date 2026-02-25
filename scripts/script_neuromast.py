@@ -30,8 +30,8 @@ allow_overwrite = True
 #     "/hpc/....../deconvolved.zarr"
 # )
 # imaging_channel = "0/4/0/0"
-imaging_zarr_file = None
-imaging_channel = None
+imaging_zarr_file = "/home/bmager/Documents/TEMP/561_Fusion.zarr"
+imaging_channel = "data"
 
 # OPTIONAL: annotation mapping (default is neuromast cell types)
 # annotation_mapping = {

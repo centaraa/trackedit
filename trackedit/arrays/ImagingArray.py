@@ -36,8 +36,11 @@ class SimpleImageArray:
         # Set initial stack based on full time window
         self._update_stack()
 
-        # Detect number of channels and set layer names
-        self.n_channels = self._stack.shape[1] if len(self._stack.shape) > 1 else 1
+        # Detect number of channels:
+        #   5D = (T, C, Z, Y, X) -> shape[1] is channels
+        #   4D = (T, Z, Y, X)    -> single channel, no explicit channel dim
+        self._has_channel_dim = self._stack.ndim == 5
+        self.n_channels = self._stack.shape[1] if self._has_channel_dim else 1
 
         # Set layer names with backward compatibility
         if imaging_layer_names is None:
@@ -63,7 +66,10 @@ class SimpleImageArray:
             raise ValueError(
                 f"Channel index {channel_idx} >= number of channels ({self.n_channels})"
             )
-        return self._stack[:, channel_idx]
+        if self._has_channel_dim:
+            return self._stack[:, channel_idx]
+        else:
+            return self._stack  # (T, Z, Y, X) — single channel, no slicing needed
 
     def get_channel_by_name(self, name: str) -> da.Array:
         """Get channel data by name"""
