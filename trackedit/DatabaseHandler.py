@@ -112,9 +112,36 @@ class DatabaseHandler:
                 metadata_loaded = toml.load(f)
                 print("metadata_loaded:", metadata_loaded)
             self.config_adjusted.data_config.metadata.update(metadata_loaded)
+            self.data_shape_full = self.config_adjusted.data_config.metadata["shape"]
         else:
-            print("No metadata.toml file found")
-        self.data_shape_full = self.config_adjusted.data_config.metadata["shape"]
+            print("No metadata.toml file found - inferring shape from database")
+            engine = create_engine(self.db_path_new)
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT MAX(t), MIN(z), MAX(z), MAX(y), MAX(x) FROM nodes")
+                ).fetchone()
+            t_max, z_min, z_max, y_max, x_max = row
+            z_range = (z_max or 0.0) - (z_min or 0.0)
+            is_2d = z_range < 1e-10
+            if is_2d:
+                self.data_shape_full = [
+                    int(t_max) + 1,
+                    int(np.ceil(y_max)) + 1,
+                    int(np.ceil(x_max)) + 1,
+                ]
+            else:
+                self.data_shape_full = [
+                    int(t_max) + 1,
+                    int(np.ceil(z_max)) + 1,
+                    int(np.ceil(y_max)) + 1,
+                    int(np.ceil(x_max)) + 1,
+                ]
+            print(f"Inferred data shape from database: {self.data_shape_full}")
+            # Write metadata.toml so all downstream components (UltrackArray, etc.) can read shape
+            shape_str = ", ".join(str(s) for s in self.data_shape_full)
+            metadata_path.write_text(f"shape = [ {shape_str},]\n")
+            print(f"Written inferred shape to: {metadata_path}")
+            self.config_adjusted.data_config.metadata.update({"shape": self.data_shape_full})
         if self.Tmax > self.data_shape_full[0]:
             self.Tmax = self.data_shape_full[0]
         else:
