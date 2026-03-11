@@ -1133,6 +1133,132 @@ class DatabaseHandler:
         )
         print("exporting finished!")
 
+    def export_tree_image(self):
+        """Export the full lineage tree as a PNG image."""
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.patches as mpatches
+        import matplotlib.pyplot as plt
+
+        print("Exporting lineage tree image...")
+
+        # --- Build per-track summary ---
+        track_info = {}
+        for track_id, group in self.df_full.groupby("track_id"):
+            mode_vals = group["generic"].mode()
+            annotation = int(mode_vals.iloc[0]) if not mode_vals.empty else -1
+            track_info[track_id] = {
+                "start_t": int(group["t"].min()),
+                "end_t": int(group["t"].max()),
+                "annotation": annotation,
+            }
+
+        # --- Build division map: parent_track_id -> [daughter_track_id, ...] ---
+        div_map = {}
+        for _, row in self.divisions.iterrows():
+            daughters = row["daughters"]
+            if isinstance(daughters, str):
+                daughters = eval(daughters)
+            div_map[int(row["track_id"])] = [int(d) for d in daughters]
+
+        # --- Find root tracks ---
+        all_daughter_ids = set()
+        for daughters in div_map.values():
+            all_daughter_ids.update(daughters)
+        root_tracks = sorted([tid for tid in track_info if tid not in all_daughter_ids])
+
+        # --- Assign x positions with recursive DFS (leaves get sequential x) ---
+        x_positions = {}
+        counter = [0]
+
+        def assign_x(track_id):
+            daughters = div_map.get(track_id, [])
+            if not daughters:
+                x_positions[track_id] = counter[0]
+                counter[0] += 1
+            else:
+                for d in daughters:
+                    assign_x(d)
+                x_positions[track_id] = (
+                    x_positions[daughters[0]] + x_positions[daughters[-1]]
+                ) / 2
+
+        for root in root_tracks:
+            assign_x(root)
+
+        # --- Color lookup ---
+        def get_color(annotation_id):
+            entry = self.annotation_mapping_dict.get(annotation_id)
+            if entry:
+                return entry["color"][:3]
+            return [0.5, 0.5, 0.5]
+
+        # --- Draw ---
+        n_tracks = len(x_positions)
+        fig_width = max(8, n_tracks * 0.25)
+        t_range = self.data_shape_full[0]
+        fig_height = max(8, t_range / 40)
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+        lw = max(0.5, min(2.0, 200 / max(n_tracks, 1)))
+
+        # Vertical track segments
+        for track_id, info in track_info.items():
+            if track_id not in x_positions:
+                continue
+            x = x_positions[track_id]
+            color = get_color(info["annotation"])
+            ax.plot(
+                [x, x],
+                [info["start_t"], info["end_t"]],
+                color=color,
+                linewidth=lw,
+                solid_capstyle="round",
+            )
+
+        # Division connectors
+        for parent_tid, daughters in div_map.items():
+            if parent_tid not in x_positions:
+                continue
+            parent_end_t = track_info[parent_tid]["end_t"]
+            div_t = parent_end_t + 1
+            x_parent = x_positions[parent_tid]
+            x_daughters = [x_positions[d] for d in daughters if d in x_positions]
+            if len(x_daughters) >= 2:
+                ax.plot(
+                    [min(x_daughters), max(x_daughters)],
+                    [div_t, div_t],
+                    color="#888888",
+                    linewidth=lw * 0.7,
+                )
+            for xd in x_daughters:
+                ax.plot(
+                    [x_parent, xd],
+                    [parent_end_t, div_t],
+                    color="#888888",
+                    linewidth=lw * 0.7,
+                )
+
+        ax.invert_yaxis()
+        ax.set_ylabel("Time (frame)")
+        ax.set_title("Full Lineage Tree")
+        ax.set_xticks([])
+        for spine in ["top", "right", "bottom"]:
+            ax.spines[spine].set_visible(False)
+
+        # Legend
+        patches = [
+            mpatches.Patch(color=entry["color"][:3], label=entry["name"])
+            for entry in self.annotation_mapping_dict.values()
+        ]
+        if patches:
+            ax.legend(handles=patches, loc="upper right", fontsize=8, framealpha=0.7)
+
+        out_path = self.working_directory / f"{self.extension_string}_lineage_tree.png"
+        fig.savefig(out_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Tree image saved to: {out_path}")
+
     def annotation_mapping(self, label):
         """Map the label to the generic column."""
         return self.annotation_mapping_dict.get(label, {"name": "other"})["name"]

@@ -44,6 +44,11 @@ class NavigationWidget(QWidget):
         self.export_btn.clicked.connect(self.export_tracks)
         main_layout.addWidget(self.export_btn)
 
+        # Add export tree button
+        self.export_tree_btn = QPushButton("Export Tree Image")
+        self.export_tree_btn.clicked.connect(self.export_tree_image)
+        main_layout.addWidget(self.export_tree_btn)
+
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(10, 2, 10, 2)
         self.setLayout(main_layout)
@@ -58,3 +63,7 @@ class NavigationWidget(QWidget):
     def export_tracks(self):
         """Handle export button click by calling DatabaseHandler's export method"""
         self.databasehandler.export_tracks()
+
+    def export_tree_image(self):
+        """Handle export tree button click"""
+        self.databasehandler.export_tree_image()
