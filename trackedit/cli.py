@@ -1,4 +1,5 @@
 """Command line interface for trackedit."""
+# Usage: pixi run python cli.py convert tiff_to_zarr path/in -o path/out
 
 from pathlib import Path
 
